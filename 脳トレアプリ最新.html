@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>昨日なに食べた？ - 脳トレ完全保存版</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #eef2f5; margin: 0; padding: 20px 10px; text-align: center; color: #333; }
+        .card { background: white; padding: 24px 18px; border-radius: 16px; max-width: 440px; margin: 0 auto; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
+        h1 { color: #2c3e50; font-size: 20px; margin-top: 0; margin-bottom: 12px; }
+        .sub-text { font-size: 13px; color: #666; margin-bottom: 15px; }
+        input[type="text"] { width: 100%; padding: 12px; margin: 6px 0; font-size: 16px; border: 2px solid #e0e0e0; border-radius: 8px; outline: none; transition: border-color 0.2s; }
+        input[type="text"]:focus { border-color: #3498db; }
+        button { background: #27ae60; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; margin-top: 10px; width: 100%; transition: background 0.2s; }
+        button:hover { opacity: 0.9; }
+        .btn-secondary { background: #e67e22; margin-top: 6px; font-size: 14px; padding: 8px; }
+        .btn-blue { background: #2980b9; }
+        .btn-purple { background: #8e44ad; }
+        .btn-gray { background: #7f8c8d; }
+        .result { margin-top: 15px; font-weight: bold; font-size: 18px; min-height: 27px; }
+        .section { margin-bottom: 25px; text-align: center; background: #fafafa; padding: 16px; border-radius: 12px; border: 1px solid #eee; }
+        .streak-badge { background: #ffeaa7; color: #d35400; font-size: 14px; font-weight: bold; padding: 6px 12px; border-radius: 20px; display: inline-block; margin-bottom: 15px; }
+        .history-item { background: white; border: 1px solid #e0e0e0; padding: 12px; margin-top: 10px; border-radius: 8px; text-align: left; font-size: 14px; }
+        .history-date { font-weight: bold; color: #2980b9; margin-bottom: 6px; border-bottom: 1px dashed #eee; padding-bottom: 4px; }
+        .hint-box { background: #fff3cd; color: #856404; padding: 8px; border-radius: 6px; font-size: 14px; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="streak-area" class="streak-badge">🔥 連続チャレンジ: 0 日目</div>
+
+    <!-- 1. 昨日の思い出クイズ -->
+    <div class="section">
+        <h1>🧠 昨日のご飯クイズ</h1>
+        <p id="quiz-title" style="font-weight: bold; color: #34495e;">読み込み中...</p>
+        <input type="text" id="answer-input" placeholder="例: サンマ、トーストなど">
+        <button onclick="checkAnswer()">答えあわせする</button>
+        <button class="btn-secondary" onclick="showHint()">💡 ヒント（最初の1文字）</button>
+        <div id="hint-box" class="hint-box"></div>
+        <div id="result-msg" class="result"></div>
+    </div>
+
+    <!-- 2. 今日のご飯記録 -->
+    <div class="section">
+        <h1>📝 今日食べたものを記録</h1>
+        <p class="sub-text">明日のクイズのために1〜3食目をメモしよう！</p>
+        <input type="text" id="today-1" placeholder="1食目（朝など例: トースト）">
+        <input type="text" id="today-2" placeholder="2食目（昼など例: ラーメン）">
+        <input type="text" id="today-3" placeholder="3食目（夜など例: 焼き魚）">
+        <button class="btn-blue" onclick="saveTodayMeal()">今日のご飯を保存する</button>
+    </div>
+
+    <!-- 3. 2日以上前の食事履歴 -->
+    <div class="section">
+        <h1>📜 昔の思い出アルバム</h1>
+        <p class="sub-text">※クイズのネタバレ防止のため【2日以上前】のみ表示されます</p>
+        <div id="history-list"></div>
+    </div>
+
+    <!-- 4. データセーブ＆復元機能（安心バックアップ） -->
+    <div class="section" style="background: #f4f6f7;">
+        <h1>💾 あんしんセーブ・復元</h1>
+        <p class="sub-text">データをファイルとしてパソコンに保存・読み込みできます</p>
+        <button class="btn-purple" onclick="exportData()">📁 データをファイルに保存（セーブ）</button>
+        
+        <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importData(event)">
+        <button class="btn-gray" onclick="document.getElementById('import-file').click()">📂 保存したファイルを読み込む（復元）</button>
+    </div>
+</div>
+
+<script>
+    // 確実な音声ファイル再生の設定（効果音ラボ様の安心音源）
+    const soundCorrect = new Audio('https://soundeffect-lab.info/sound/anime/mp3/dingdong1.mp3');
+    const soundSave = new Audio('https://soundeffect-lab.info/sound/button/mp3/button1.mp3');
+
+    function playSound(type) {
+        if (type === 'correct') {
+            soundCorrect.currentTime = 0;
+            soundCorrect.play().catch(e => console.log("音の再生がブロックされました:", e));
+        } else if (type === 'save') {
+            soundSave.currentTime = 0;
+            soundSave.play().catch(e => console.log("音の再生がブロックされました:", e));
+        }
+    }
+
+    function getFormattedDate(offsetDays = 0) {
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        return d.toISOString().split('T')[0];
+    }
+
+    window.onload = function() {
+        loadQuiz();
+        loadHistory();
+        updateStreak();
+    };
+
+    function loadQuiz() {
+        const yesterdayStr = getFormattedDate(-1);
+        const history = JSON.parse(localStorage.getItem('mealHistory') || '{}');
+        const yesterdayMeal = history[yesterdayStr];
+
+        if (yesterdayMeal) {
+            document.getElementById('quiz-title').innerText = `昨日の「1食目」は何を食べた？`;
+        } else {
+            document.getElementById('quiz-title').innerText = "昨日の記録がありません。\nまずは今日のご飯を記録して明日遊んでね！";
+        }
+        document.getElementById('hint-box').style.display = 'none';
+        document.getElementById('result-msg').innerText = '';
+    }
+
+    function showHint() {
+        const yesterdayStr = getFormattedDate(-1);
+        const history = JSON.parse(localStorage.getItem('mealHistory') || '{}');
+        const yesterdayMeal = history[yesterdayStr];
+
+        if (!yesterdayMeal || !yesterdayMeal.meal1) {
+            alert('昨日の1食目の記録がありません！');
+            return;
+        }
+
+        const firstChar = yesterdayMeal.meal1.trim().charAt(0);
+        const hintBox = document.getElementById('hint-box');
+        hintBox.innerText = `💡 ヒント：最初の文字は「 ${firstChar} 」です！`;
+        hintBox.style.display = 'block';
+    }
+
+    function saveTodayMeal() {
+        const m1 = document.getElementById('today-1').value.trim();
+        const m2 = document.getElementById('today-2').value.trim();
+        const m3 = document.getElementById('today-3').value.trim();
+
+        if (!m1 && !m2 && !m3) {
+            alert('どれか1つは入力してくださいね！');
+            return;
+        }
+
+        const todayStr = getFormattedDate(0);
+        const history = JSON.parse(localStorage.getItem('mealHistory') || '{}');
+        
+        history[todayStr] = { meal1: m1, meal2: m2, meal3: m3 };
+        localStorage.setItem('mealHistory', JSON.stringify(history));
+
+        playSound('save');
+        alert('🎉 今日のお食事を保存しました！明日クイズが出題されます。');
+
+        document.getElementById('today-1').value = '';
+        document.getElementById('today-2').value = '';
+        document.getElementById('today-3').value = '';
+        loadHistory();
+    }
+
+    function checkAnswer() {
+        const userAns = document.getElementById('answer-input').value.trim();
+        const yesterdayStr = getFormattedDate(-1);
+        const history = JSON.parse(localStorage.getItem('mealHistory') || '{}');
+        const yesterdayMeal = history[yesterdayStr];
+
+        if (!yesterdayMeal) {
+            alert('昨日の記録が登録されていません！');
+            return;
+        }
+
+        if (!userAns) {
+            alert('答えを入力してください！');
+            return;
+        }
+
+        const correctAns = yesterdayMeal.meal1;
+        const resDiv = document.getElementById('result-msg');
+
+        if (correctAns.toLowerCase().includes(userAns.toLowerCase()) || userAns.toLowerCase().includes(correctAns.toLowerCase())) {
+            playSound('correct');
+            resDiv.style.color = '#27ae60';
+            resDiv.innerText = '🎉 大正解！素晴らしい記憶力です！';
+            
+            let streak = parseInt(localStorage.getItem('streakCount') || '0');
+            const lastQuizDate = localStorage.getItem('lastQuizDate');
+            const todayStr = getFormattedDate(0);
+
+            if (lastQuizDate !== todayStr) {
+                streak += 1;
+                localStorage.setItem('streakCount', streak);
+                localStorage.setItem('lastQuizDate', todayStr);
+                updateStreak();
+            }
+        } else {
+            resDiv.style.color = '#e74c3c';
+            resDiv.innerText = `惜しい！ 正解は「 ${correctAns} 」でした！`;
+        }
+    }
+
+    function updateStreak() {
+        const streak = localStorage.getItem('streakCount') || '0';
+        document.getElementById('streak-area').innerText = `🔥 連続チャレンジ: ${streak} 日目`;
+    }
+
+    function loadHistory() {
+        const history = JSON.parse(localStorage.getItem('mealHistory') || '{}');
+        const historyListDiv = document.getElementById('history-list');
+        historyListDiv.innerHTML = '';
+
+        const todayStr = getFormattedDate(0);
+        const yesterdayStr = getFormattedDate(-1);
+
+        const dates = Object.keys(history).sort().reverse();
+        let count = 0;
+
+        dates.forEach(date => {
+            if (date !== todayStr && date !== yesterdayStr) {
+                count++;
+                const item = history[date];
+                const html = `
+                    <div class="history-item">
+                        <div class="history-date">📅 ${date} のお献立</div>
+                        <div><b>1食目:</b> ${item.meal1 || 'なし'}</div>
+                        <div><b>2食目:</b> ${item.meal2 || 'なし'}</div>
+                        <div><b>3食目:</b> ${item.meal3 || 'なし'}</div>
+                    </div>
+                `;
+                historyListDiv.innerHTML += html;
+            }
+        });
+
+        if (count === 0) {
+            historyListDiv.innerHTML = '<p style="color:#999; font-size:13px; margin: 15px 0;">2日以上前の記録はまだありません。<br>毎日続けていくとここに自動で溜まっていきます！</p>';
+        }
+    }
+
+    function exportData() {
+        const history = localStorage.getItem('mealHistory') || '{}';
+        const streak = localStorage.getItem('streakCount') || '0';
+        const exportObj = { mealHistory: JSON.parse(history), streakCount: streak };
+
+        const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `昨日なに食べた_バックアップ_${getFormattedDate(0)}.json`;
+        a.click();
+        alert('データを「ダウンロード」フォルダに保存しました！');
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.mealHistory) {
+                    localStorage.setItem('mealHistory', JSON.stringify(data.mealHistory));
+                    if (data.streakCount) localStorage.setItem('streakCount', data.streakCount);
+                    alert('データの復元が完了しました！');
+                    location.reload();
+                } else {
+                    alert('正しいバックアップファイルではありません。');
+                }
+            } catch (err) {
+                alert('ファイルの読み込みに失敗しました。');
+            }
+        };
+        reader.readAsText(file);
+    }
+</script>
+
+</body>
+</html>
